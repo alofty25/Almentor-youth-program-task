@@ -31,5 +31,7 @@ urlpatterns = [
 
     #API endpoints
     path('api/projects/', include('projects.urls')),
+    #just api/ because sub-paths already defined
+    path('api/', include('tasks.urls')),
 
 ]
