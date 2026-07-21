@@ -2,155 +2,195 @@
 
 ## Overview
 
-This document describes the unit test suite for the **Almentor Youth Program Task Management API** — a Django REST Framework project with JWT authentication, soft-delete, and data isolation.
+This document describes the complete test suite for the **Almentor Youth Program Task Management API** — a Django REST Framework project with JWT authentication, soft-delete, and data isolation.
 
-> **Philosophy**: These are strictly *unit tests*. They test isolated functions, classes, and methods. External dependencies (JWT, logging) are mocked. No integration or E2E tests at this stage.
+The suite is split into two layers:
+
+| Layer | Purpose | Database | Mocking |
+|-------|---------|---------|---------|
+| **Unit Tests** | Isolated functions, classes, methods | Real PostgreSQL locally / SQLite in CI | External deps mocked (e.g., `logger`) |
+| **Integration Tests** | Multi-step API flows with real JWT | Real PostgreSQL (local & CI) | No mocking |
 
 ---
 
 ## How to Run Tests
 
-### Locally (against the real PostgreSQL database)
+### Run All Tests Locally (PostgreSQL)
 
-Ensure your `.env` file is properly configured and PostgreSQL is running, then:
+Ensure your `.env` file is configured and PostgreSQL is running:
 
 ```bash
-# Using uv (recommended):
+# All tests (unit + integration):
 uv run python manage.py test --verbosity=2
 
-# Without uv:
-python manage.py test --verbosity=2
+# Unit tests only:
+uv run python manage.py test core projects tasks --verbosity=2
+
+# Integration tests only:
+uv run python manage.py test integration_tests --verbosity=2
 ```
 
-This runs all tests against the **real PostgreSQL database** configured in your `.env` file. Django creates a temporary test database (`test_<DB_NAME>`), runs all tests, and drops it at the end.
-
-### In CI / Without PostgreSQL (SQLite)
-
-The `core/test_settings.py` file overrides the database to use in-memory SQLite:
+### Run CI-Style (SQLite, unit tests only)
 
 ```bash
-uv run python manage.py test --settings=core.test_settings --verbosity=2
+uv run python manage.py test \
+  --settings=core.test_settings \
+  --verbosity=2 \
+  core projects tasks
 ```
 
-### Run a specific app's tests
+### Run a Specific Test File or Class
 
 ```bash
-# All tests for the 'tasks' app:
-uv run python manage.py test tasks --verbosity=2
-
 # A specific test file:
-uv run python manage.py test tasks.tests.test_filters --verbosity=2
+uv run python manage.py test integration_tests.test_project_lifecycle
 
 # A specific test class:
-uv run python manage.py test tasks.tests.test_filters.ApplyTaskFiltersSearchTestCase
+uv run python manage.py test integration_tests.test_filters_and_search.TaskSearchAndPaginationTest
 
 # A specific test method:
-uv run python manage.py test tasks.tests.test_filters.ApplyTaskFiltersSearchTestCase.test_search_matches_title_case_insensitive
+uv run python manage.py test integration_tests.test_filters_and_search.TaskSearchAndPaginationTest.test_default_page_returns_10_results
 ```
 
 ---
 
 ## Test Coverage Summary
 
-| App | Test File | Test Cases | What's Covered |
-|-----|-----------|-----------|----------------|
-| `core` | `test_models.py` | 9 | `ActiveManager` filtering, `BaseModel.delete()`, `restore()`, `hard_delete()` |
-| `projects` | `test_models.py` | 7 | `__str__`, cascade soft-delete to tasks, `UniqueConstraint` at DB level |
-| `projects` | `test_serializers.py` | 9 | `validate_name` business rule, field exposure, read-only enforcement |
-| `projects` | `test_views.py` | 18 | Auth, data isolation, list/create/retrieve/update/delete via API |
-| `tasks` | `test_models.py` | 7 | `validate_due_date` boundaries, `__str__`, default field values |
-| `tasks` | `test_serializers.py` | 8 | Field exposure, read-only `project_id`, `DONE→TODO` warning log |
-| `tasks` | `test_views.py` | 22 | Auth, data isolation, all CRUD endpoints, soft-delete, past due date |
-| `tasks` | `test_filters.py` | 17 | All filter/search/sort params, invalid inputs, combined filters |
-| **Total** | **8 files** | **~97 tests** | |
+### Unit Tests (117 tests)
+
+| App | Test File | Tests | Focus |
+|-----|-----------|-------|-------|
+| `core` | `test_models.py` | 9 | `BaseModel`, `ActiveManager` |
+| `projects` | `test_models.py` | 7 | Cascade soft-delete, `UniqueConstraint` |
+| `projects` | `test_serializers.py` | 9 | `validate_name`, field exposure, read-only |
+| `projects` | `test_views.py` | 18 | Auth, data isolation, full CRUD |
+| `tasks` | `test_models.py` | 7 | `validate_due_date` boundaries, defaults |
+| `tasks` | `test_serializers.py` | 8 | `DONE→TODO` warning, read-only `project_id` |
+| `tasks` | `test_views.py` | 22 | Auth, data isolation, CRUD, soft-delete |
+| `tasks` | `test_filters.py` | 17 | All filter/search/sort params, combined |
+
+### Integration Tests (63 tests)
+
+| File | Tests | Critical Flow |
+|------|-------|---------------|
+| `test_project_lifecycle.py` | 9 | **Flow 1**: Create project → Add tasks → Mark done → Delete (cascade) |
+| `test_filters_and_search.py` | 27 | **Flow 2**: Filter by status/priority/date + **Flow 3**: Search + Pagination |
+| `test_authentication_flow.py` | 13 | JWT obtain → use → refresh → all error cases |
+| `test_data_isolation.py` | 14 | Full cross-user isolation (projects + tasks, all endpoints) |
+| `test_task_status_transitions.py` | 10 | All transitions, DONE→TODO warning, invalid values |
+
+**Total: 180 tests**
+
+---
+
+## Critical Flows Covered
+
+### Flow 1 — Full Project Lifecycle
+```
+POST /api/projects/
+  → POST /api/projects/:id/tasks/   (×2 tasks)
+    → PUT /api/tasks/:id/  (mark done)
+      → DELETE /api/projects/:id/
+        → verify tasks cascade soft-deleted (not hard-deleted)
+        → verify 404 on deleted task GET
+```
+
+### Flow 2 — Filter by Status and Priority
+```
+Create 6 tasks with distinct status × priority combinations
+  → GET /api/tasks/?status=todo
+  → GET /api/tasks/?priority=high
+  → GET /api/tasks/?status=in_progress&priority=medium
+  → GET /api/tasks/?due_date_from=...&due_date_to=...
+  → GET /api/tasks/?ordering=-due_date
+```
+
+### Flow 3 — Search and Pagination
+```
+Create 15 tasks (8 with keyword, 7 without)
+  → GET /api/tasks/?q=authentication  (returns 8, first page = 10)
+  → GET /api/tasks/?q=authentication&limit=5  (paginated search)
+  → GET /api/tasks/?page=2  (remaining 5 results)
+  → verify next/previous links, no duplicate IDs across pages
+```
 
 ---
 
 ## Edge Cases Handled
 
-### `core` — BaseModel / ActiveManager
+### Unit Tests
 
-| Edge Case | Test |
-|-----------|------|
-| Soft-deleted records are hidden from `objects` | `test_soft_deleted_record_hidden_from_default_manager` |
-| Soft-deleted records remain in `all_objects` | `test_soft_deleted_record_still_in_all_objects` |
-| `deleted_at` timestamp matches time of deletion | `test_soft_delete_timestamp_is_close_to_now` |
-| `restore()` re-exposes the record | `test_restore_makes_record_visible_in_default_manager` |
-| `hard_delete()` works even on already-soft-deleted records | `test_hard_delete_on_soft_deleted_record_also_removes_row` |
+| Edge Case | Test Location |
+|-----------|--------------|
+| Soft-deleted records hidden from default manager | `core/tests/test_models.py` |
+| `restore()` re-exposes soft-deleted records | `core/tests/test_models.py` |
+| Cascade soft-delete doesn't hard-delete tasks | `projects/tests/test_models.py` |
+| `validate_name` excludes self during UPDATE | `projects/tests/test_serializers.py` |
+| `owner` and `deleted_at` never exposed in API | `projects/tests/test_serializers.py` |
+| Accessing another user's resource returns 404 (not 403) | `projects/tests/test_views.py` |
+| `validate_due_date`: today is valid (boundary inclusive) | `tasks/tests/test_models.py` |
+| `DONE → TODO` triggers `logger.warning` | `tasks/tests/test_serializers.py` |
+| `DONE → TODO` is still allowed (not blocked) | `tasks/tests/test_serializers.py` |
+| SQL-injection-like ordering key silently ignored | `tasks/tests/test_filters.py` |
+| Invalid status filter returns empty queryset | `tasks/tests/test_filters.py` |
+| Combined filters use AND logic | `tasks/tests/test_filters.py` |
 
-### `projects` — Model
+### Integration Tests
 
-| Edge Case | Test |
-|-----------|------|
-| Cascade soft-delete doesn't hard-delete tasks | `test_soft_deleting_project_keeps_tasks_in_all_objects` |
-| Cascade only affects the deleted project's tasks | `test_soft_delete_does_not_affect_tasks_of_other_projects` |
-| Two users can share the same project name | `test_different_users_can_share_project_names` |
+| Edge Case | Test Location |
+|-----------|--------------|
+| Wrong password returns 401 | `test_authentication_flow.py` |
+| Wrong auth scheme (`Token` vs `Bearer`) returns 401 | `test_authentication_flow.py` |
+| Malformed JWT returns 401 | `test_authentication_flow.py` |
+| Tampered refresh token returns 401 | `test_authentication_flow.py` |
+| User A updating User B's project leaves B's data unchanged | `test_data_isolation.py` |
+| User A cannot create tasks in User B's project | `test_data_isolation.py` |
+| Same project name allowed for different users | `test_data_isolation.py` |
+| Cascade soft-delete persists tasks in `all_objects` | `test_project_lifecycle.py` |
+| Filter results reflect status changes immediately (no caching) | `test_task_status_transitions.py` |
+| Status preserved after a rejected invalid update | `test_task_status_transitions.py` |
+| Out-of-range page returns 404 | `test_filters_and_search.py` |
+| Pagination: no duplicate IDs across pages | `test_filters_and_search.py` |
+| Search: uppercase = lowercase (case-insensitive) | `test_filters_and_search.py` |
+| Search + status filter combined via real API | `test_filters_and_search.py` |
 
-### `projects` — Serializer
+---
 
-| Edge Case | Test |
-|-----------|------|
-| `validate_name` excludes self during UPDATE (prevent false rejection) | `test_update_existing_project_with_same_name_passes_validation` |
-| `owner` and `deleted_at` never exposed in API output | `test_serialized_output_does_not_expose_*` |
-| Read-only fields (`id`, `created_at`) cannot be overwritten via payload | `test_id_and_timestamps_are_read_only` |
+## CI/CD Workflow (GitHub Actions)
 
-### `projects` — Views
+### Two Jobs
 
-| Edge Case | Test |
-|-----------|------|
-| Accessing another user's project returns 404, not 403 | `test_retrieve_other_users_project_returns_404` |
-| Soft-deleted projects hidden from list view | `test_list_does_not_return_soft_deleted_projects` |
-| DELETE is a soft-delete (row still exists in DB) | `test_delete_soft_deletes_project` |
+```
+push / pull_request
+       │
+       ▼
+┌──────────────────────────┐
+│  unit-tests              │  Python 3.10 · SQLite (fast, zero-config)
+│  Runs core/projects/tasks│
+└────────────┬─────────────┘
+             │ needs: unit-tests
+             ▼
+┌──────────────────────────┐
+│  integration-tests       │  Python 3.10 · PostgreSQL 16 service container
+│  Runs integration_tests/ │
+└──────────────────────────┘
+```
 
-### `tasks` — Model / Validator
+**Why single Python version?**
+The project's `.python-version` file pins **Python 3.10**. Running the matrix on 3.10/3.11/3.12 added unnecessary CI minutes with no real benefit — the library ecosystem is stable across versions for this project's dependencies.
 
-| Edge Case | Test |
-|-----------|------|
-| Yesterday fails (strictly past) | `test_yesterday_fails_validation` |
-| Today passes (boundary: inclusive) | `test_today_passes_validation` |
-| `due_date` field is nullable (optional) | `test_due_date_is_optional` |
-
-### `tasks` — Serializer
-
-| Edge Case | Test |
-|-----------|------|
-| `DONE → TODO` transition triggers `logger.warning` | `test_done_to_todo_transition_triggers_logger_warning` |
-| `DONE → TODO` is still *allowed* (warning only, not blocked) | `test_done_to_todo_transition_still_saves_new_status` |
-| Updating title without changing status does NOT trigger warning | `test_update_without_status_change_does_not_log_warning` |
-| `project_id` in payload is ignored (read-only) | `test_project_id_is_read_only` |
-
-### `tasks` — Views
-
-| Edge Case | Test |
-|-----------|------|
-| Creating a task with a past `due_date` returns 400 | `test_create_task_with_past_due_date_returns_400` |
-| Creating a task with an invalid `status` value returns 400 | `test_create_task_with_invalid_status_returns_400` |
-| After soft-delete, a GET on the same task returns 404 | `test_deleted_task_returns_404_on_subsequent_get` |
-| User1 cannot create tasks in User2's project | `test_create_task_in_other_users_project_returns_404` |
-
-### `tasks` — Filters (`apply_task_filters`)
-
-| Edge Case | Test |
-|-----------|------|
-| Invalid/unknown `status` value returns empty queryset | `test_filter_by_invalid_status_returns_empty_queryset` |
-| SQL-injection-like `ordering` key is silently ignored | `test_invalid_ordering_key_is_silently_ignored` |
-| Date range boundaries are inclusive (exact match included) | `test_due_date_range_inclusive_boundaries` |
-| Search is case-insensitive | `test_search_matches_title_case_insensitive` |
-| Search is partial (not exact match) | `test_search_partial_match_works` |
-| Combined filters use AND logic | `test_combined_status_and_search_filter` |
+**Why PostgreSQL in CI for integration tests?**
+Integration tests must run against the real database engine to catch PostgreSQL-specific constraint enforcement, query behaviour, and transaction semantics that SQLite doesn't replicate.
 
 ---
 
 ## Test Architecture Decisions
 
-### Why SQLite in CI?
-Running against SQLite in GitHub Actions means no Postgres service container is needed — simpler YAML, faster runs, works on any GitHub-hosted runner. Locally, tests run against the real PostgreSQL database for full fidelity.
-
-### Why `force_authenticate()` instead of JWT tokens?
-`force_authenticate()` bypasses the JWT middleware entirely, keeping view-layer tests focused on *business logic* rather than authentication plumbing. JWT token generation is already tested by `djangorestframework-simplejwt`'s own test suite.
-
-### Why mock `logger` in serializer tests?
-Mocking `tasks.serializers.logger` lets us assert that `logger.warning()` is called (or not) with specific arguments, without polluting test output or relying on log handlers. It also ensures tests are deterministic.
-
-### Why a dedicated `test_filters.py`?
-`apply_task_filters()` is a pure queryset-transformation function with significant branching logic. Isolating it in its own file (with mock request objects) makes each filter concern independently testable without going through the HTTP layer.
+| Decision | Rationale |
+|----------|-----------|
+| `force_authenticate()` in unit tests | Keeps view tests focused on business logic, not auth plumbing |
+| Real JWT in integration tests | Tests the complete authentication chain as users experience it |
+| `IntegrationTestBase.auth_client()` helper | Encapsulates the token-obtain flow; tests stay readable |
+| `patch("tasks.serializers.logger")` | Verifies the warning is triggered without polluting test output |
+| `all_objects` manager assertions | Confirms soft-delete (not hard-delete) at the DB level |
+| Dedicated `test_filters.py` (unit) + `test_filters_and_search.py` (integration) | `apply_task_filters()` is complex; tested in isolation (unit) AND through the full HTTP stack (integration) |
