@@ -60,6 +60,7 @@ services:
     environment:
       # Override DB_HOST so Django talks to the service container, not localhost
       DB_HOST: db
+      SEED_DB: ${SEED_DB:-false}
     depends_on:
       db:
         condition: service_healthy
