@@ -12,7 +12,6 @@
 set -e
 
 echo "==> Waiting for PostgreSQL to be ready..."
-# Poll pg_isready until the database accepts connections (max 60s)
 until python -c "
 import sys, psycopg2, os, time
 for attempt in range(60):
@@ -26,7 +25,7 @@ for attempt in range(60):
         )
         break
     except psycopg2.OperationalError:
-        print(f'  Attempt {attempt+1}/60 — Postgres not ready yet, retrying...')
+        print(f'  Attempt {attempt+1}/60 - Postgres not ready yet, retrying...')
         time.sleep(1)
 else:
     print('ERROR: PostgreSQL did not become ready within 60 seconds.')

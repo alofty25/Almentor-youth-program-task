@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 from core.models import BaseModel
 
 
@@ -24,12 +25,10 @@ class Project(BaseModel):
     def __str__(self):
         return f"{self.name} ({self.owner.username})"
 
-
     def delete(self, *args, **kwargs):
-        """Soft delete the project and cascade soft-delete its tasks."""
-        # self.tasks.all() works because we set related_name='tasks' in the Task model
-        for task in self.tasks.all():
-            task.delete()
+        """Soft delete the project and cascade soft-delete its tasks in a single query."""
+        # Bulk soft-delete all related tasks in one UPDATE (avoids N+1 queries)
+        self.tasks.filter(deleted_at__isnull=True).update(deleted_at=timezone.now())
 
         # Call the parent BaseModel delete to soft-delete the project itself
         super().delete(*args, **kwargs)
