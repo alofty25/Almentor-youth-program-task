@@ -25,6 +25,7 @@ A **production-grade RESTful API** for managing projects and tasks, built with D
 | **Package Manager** | [UV](https://docs.astral.sh/uv/) (fast Python package manager) |
 | **Containerization** | Docker + Docker Compose |
 | **CI/CD** | GitHub Actions (unit tests on SQLite + integration tests on PostgreSQL) |
+| **API Testing** | Postman (initial manual testing & endpoint validation) |
 | **Test Data** | Faker (realistic seeding) |
 
 ---
@@ -528,7 +529,7 @@ curl "http://localhost:8000/api/tasks/?status=todo&priority=high&ordering=-due_d
 
 ## 🧪 Testing
 
-The project has **186 tests** across two layers:
+Initial API exploration, route validation, and JWT authorization flows were manually tested using **Postman**. The project is backed by a automated test suite of **186 tests** across two layers:
 
 ```mermaid
 flowchart TB
