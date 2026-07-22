@@ -134,7 +134,10 @@ cp .env.docker.example .env.docker
 docker compose up --build
 
 # OR — start with a pre-seeded database (6 users, 25 projects, 120 tasks)
-docker compose up --build -e SEED_DB=true
+# Linux / macOS / Git Bash:
+SEED_DB=true docker compose up --build
+# PowerShell:
+$env:SEED_DB="true"; docker compose up --build
 ```
 
 #### 4. Access the API
