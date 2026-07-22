@@ -130,14 +130,8 @@ cp .env.docker.example .env.docker
 #### 3. Start everything
 
 ```bash
-# Start API + PostgreSQL (migrations run automatically)
+# Start API + PostgreSQL (migrations and DB seeding run automatically on boot)
 docker compose up --build
-
-# OR — start with a pre-seeded database (6 users, 25 projects, 120 tasks)
-# Linux / macOS / Git Bash:
-SEED_DB=true docker compose up --build
-# PowerShell:
-$env:SEED_DB="true"; docker compose up --build
 ```
 
 #### 4. Access the API
@@ -150,7 +144,7 @@ Postgres:  localhost:5432 (accessible via DBeaver, pgAdmin, etc.)
 #### Docker Lifecycle Commands
 
 ```bash
-docker compose up --build       # Build and start (API on :8000, DB on :5432)
+docker compose up --build       # Build and start (API on :8000, DB on :5432, auto-seeded)
 docker compose down             # Stop containers (DB data preserved in volume)
 docker compose down -v          # Full teardown — stop + delete DB data volume
 docker compose logs -f api      # Stream API container logs
@@ -166,7 +160,7 @@ flowchart TB
         DB -->|"healthcheck: pg_isready"| Entry
         Entry -->|"1. Wait for DB"| DB
         Entry -->|"2. Run migrations"| API
-        Entry -->|"3. Seed DB (optional)"| API
+        Entry -->|"3. Seed DB with realistic data"| API
         Entry -->|"4. Start runserver"| API
     end
 
@@ -216,7 +210,7 @@ uv run python manage.py migrate
 uv run python manage.py runserver
 ```
 
-#### 5. (Optional) Seed the database with realistic data
+#### 5. Seed the database with realistic data
 
 ```bash
 uv run python manage.py seed --clear
@@ -249,7 +243,7 @@ This creates **6 users**, **25 projects**, and **120 tasks** with realistic name
 | `DB_PASSWORD` | PostgreSQL password | — |
 | `DB_HOST` | Database host (`db` for Docker, `localhost` for local) | `localhost` |
 | `DB_PORT` | Database port | `5432` |
-| `SEED_DB` | Auto-seed database on Docker boot (`true` / `false`) | `false` |
+| `SEED_DB` | Auto-seed database on Docker boot (`true` / `false`) | `true` |
 
 ---
 
