@@ -45,6 +45,7 @@ help:
 	@printf "  $(GREEN)make dev$(RESET)               Start the dev server at http://127.0.0.1:8000\n"
 	@printf "  $(GREEN)make shell$(RESET)             Open the Django interactive Python shell\n"
 	@printf "  $(GREEN)make superuser$(RESET)         Create a new superuser account\n"
+	@printf "  $(GREEN)make seed$(RESET)              Seed database with production-like data\n"
 	@printf "  $(GREEN)make token u=<username>$(RESET)  Print a fresh JWT token for quick API testing\n\n"
 
 	@printf "$(CYAN)$(BOLD)🗄  DATABASE$(RESET)\n"
@@ -90,6 +91,10 @@ shell:
 superuser:
 	@printf "$(CYAN)Creating superuser...$(RESET)\n"
 	$(MANAGE) createsuperuser
+
+seed:
+	@printf "$(CYAN)Seeding database with production-like data...$(RESET)\n"
+	$(MANAGE) seed --clear
 
 # Usage: make token u=myusername
 # Requires the user to already exist. Prints the access token to stdout.

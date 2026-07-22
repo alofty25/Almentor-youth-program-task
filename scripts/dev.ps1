@@ -61,6 +61,7 @@ switch ($Command.ToLower()) {
         Write-Row   "dev.ps1 dev"               "Start the dev server at http://127.0.0.1:8000"
         Write-Row   "dev.ps1 shell"             "Open the Django interactive Python shell"
         Write-Row   "dev.ps1 superuser"         "Create a new superuser account"
+        Write-Row   "dev.ps1 seed"              "Seed database with production-like data"
         Write-Row   "dev.ps1 token [user]"      "Fetch a fresh JWT access token for [user]"
         Write-Host ""
         Write-Cyan  "  DATABASE"
@@ -109,6 +110,11 @@ switch ($Command.ToLower()) {
     "superuser" {
         Write-Cyan "Creating superuser..."
         uv run python manage.py createsuperuser
+    }
+
+    "seed" {
+        Write-Cyan "Seeding database with production-like data..."
+        uv run python manage.py seed --clear
     }
 
     "token" {
