@@ -75,6 +75,12 @@ switch ($Command.ToLower()) {
         Write-Row   "dev.ps1 test-integration"  "Run integration tests only"
         Write-Row   "dev.ps1 test-fast"         "Unit tests with SQLite - no Postgres needed"
         Write-Host ""
+        Write-Cyan  "  DOCKER"
+        Write-Row   "dev.ps1 docker-up"         "Build image + start API and Postgres containers"
+        Write-Row   "dev.ps1 docker-up-seed"    "Same as docker-up, but seeds DB on first boot"
+        Write-Row   "dev.ps1 docker-down"       "Stop containers (keeps DB data volume)"
+        Write-Row   "dev.ps1 docker-clean"      "Full teardown: stop containers + delete DB volume"
+        Write-Host ""
         Write-Cyan  "  CLEANUP"
         Write-Row   "dev.ps1 clean"             "Remove all __pycache__ dirs and .pyc files"
         Write-Host ""
@@ -233,6 +239,29 @@ print(f"Removed {count} cache directories.")
 
         $cleanScript | uv run python
         Write-Green "OK Cache cleared."
+    }
+
+    # -----------------------------------------------------------------------
+    "docker-up" {
+        Write-Cyan "Building and starting Docker containers..."
+        docker compose up --build
+    }
+
+    "docker-up-seed" {
+        Write-Cyan "Building and starting Docker containers with DB seeding on first boot..."
+        $env:SEED_DB = "true"
+        docker compose up --build
+        $env:SEED_DB = ""
+    }
+
+    "docker-down" {
+        Write-Yellow "Stopping and removing containers (data volume preserved)..."
+        docker compose down
+    }
+
+    "docker-clean" {
+        Write-Red "Full teardown - stopping containers AND deleting data volume..."
+        docker compose down -v
     }
 
     # -----------------------------------------------------------------------

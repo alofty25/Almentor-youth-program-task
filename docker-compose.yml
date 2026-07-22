@@ -1,0 +1,72 @@
+# =============================================================================
+#  docker-compose.yml — Almentor Task Management API
+#
+#  QUICK START (one command):
+#    docker compose up --build
+#
+#  With live DB seeding on first boot:
+#    SEED_DB=true docker compose up --build
+#
+#  Teardown (keeps Postgres data volume):
+#    docker compose down
+#
+#  Full teardown (removes everything including DB data):
+#    docker compose down -v
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — bundled database (no external Postgres required)
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: almentor_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-task_management_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      # Named volume persists data across container restarts
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Expose Postgres on the host so you can connect with DBeaver/pgAdmin
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-task_management_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Django REST API
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: almentor_api
+    restart: unless-stopped
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    ports:
+      - "8000:8000"
+    env_file:
+      # Load variables from .env.docker (copy from .env.docker.example)
+      - .env.docker
+    environment:
+      # Override DB_HOST so Django talks to the service container, not localhost
+      DB_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount source code for live reload during development
+      - .:/app
+      # Prevent the host's .venv from overwriting the container's venv
+      - /app/.venv
+
+volumes:
+  postgres_data:
+    name: almentor_postgres_data

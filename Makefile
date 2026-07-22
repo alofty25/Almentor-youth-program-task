@@ -23,9 +23,10 @@ RESET  := \033[0m
 # Declare all targets as phony (no output files)
 .PHONY: help \
         install update \
-        dev shell superuser \
+        dev shell superuser seed \
         migrate migrations check-migrations \
         test test-unit test-integration test-fast \
+        docker-up docker-up-seed docker-down docker-clean \
         clean \
         token
 
@@ -58,6 +59,12 @@ help:
 	@printf "  $(GREEN)make test-unit$(RESET)         Run unit tests only (core / projects / tasks)\n"
 	@printf "  $(GREEN)make test-integration$(RESET)  Run integration tests only (real JWT + DB flows)\n"
 	@printf "  $(GREEN)make test-fast$(RESET)         Unit tests with SQLite — fastest, no Postgres needed\n\n"
+
+	@printf "$(CYAN)$(BOLD)🐳  DOCKER$(RESET)\n"
+	@printf "  $(GREEN)make docker-up$(RESET)         Build image + start API and Postgres containers\n"
+	@printf "  $(GREEN)make docker-up-seed$(RESET)    Same as docker-up, but seeds DB on first boot\n"
+	@printf "  $(GREEN)make docker-down$(RESET)       Stop and remove containers (keeps DB data volume)\n"
+	@printf "  $(GREEN)make docker-clean$(RESET)      Full teardown: stop containers + delete DB volume\n\n"
 
 	@printf "$(CYAN)$(BOLD)🧹  CLEANUP$(RESET)\n"
 	@printf "  $(GREEN)make clean$(RESET)             Remove all __pycache__ dirs and .pyc files\n\n"
@@ -176,3 +183,22 @@ removed = 0; \
 print('Done.'); \
 "
 	@printf "$(GREEN)✔ Cache cleared.$(RESET)\n"
+
+# =============================================================================
+#  DOCKER
+# =============================================================================
+docker-up:
+	@printf "$(CYAN)Building and starting Docker containers...$(RESET)\n"
+	docker compose up --build
+
+docker-up-seed:
+	@printf "$(CYAN)Building and starting Docker containers with DB seeding...$(RESET)\n"
+	SEED_DB=true docker compose up --build
+
+docker-down:
+	@printf "$(YELLOW)Stopping and removing containers (data volume preserved)...$(RESET)\n"
+	docker compose down
+
+docker-clean:
+	@printf "$(RED)Full teardown — stopping containers AND deleting data volume...$(RESET)\n"
+	docker compose down -v

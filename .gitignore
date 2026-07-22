@@ -1,8 +1,11 @@
 .venv/
 .env
+.env.docker
 __pycache__/
 *.pyc
 *.sqlite3
 media/
 static/
 .idea/
+# Docker
+postgres_data/
